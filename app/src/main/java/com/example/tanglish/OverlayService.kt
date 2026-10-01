@@ -58,7 +58,7 @@ class OverlayService : AccessibilityService() {
             layer?.removeAllViews()
         }
         handler.removeCallbacks(scanTask)
-        handler.postDelayed(scanTask, 600) // wait until things settle
+        handler.postDelayed(scanTask, 1000) // wait until things settle
     }
 
     private fun scan() {
@@ -108,20 +108,33 @@ class OverlayService : AccessibilityService() {
         return letters >= 3 && latin * 10 >= letters * 8
     }
 
+    private var blockedUntil = 0L
+
     private fun request(texts: List<String>) {
-        val key = getSharedPreferences("prefs", MODE_PRIVATE).getString("key", "") ?: ""
-        if (key.isEmpty()) return
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val key = prefs.getString("key", "") ?: ""
+        val model = prefs.getString("model", "gemini-flash-lite-latest") ?: "gemini-flash-lite-latest"
+        if (key.isEmpty()) {
+            prefs.edit().putString("status", "No API key saved").apply()
+            return
+        }
+        if (System.currentTimeMillis() < blockedUntil) return
         pending.addAll(texts)
         executor.execute {
+            var ok = false
             try {
-                val result = Api.convert(key, texts)
+                val result = Api.convert(key, model, texts)
                 for (t in texts) cache[t] = result[t] ?: ""
+                prefs.edit().putString("status", "Working. Last request OK").apply()
+                ok = true
             } catch (e: Exception) {
-                // network or API problem: try again on a later scan
+                // Wait 30 seconds before trying again, so we don't hammer a limit
+                blockedUntil = System.currentTimeMillis() + 30000
+                prefs.edit().putString("status", "Last error: " + (e.message ?: "unknown")).apply()
             } finally {
                 pending.removeAll(texts.toSet())
             }
-            handler.post { scan() }
+            if (ok) handler.post { scan() }
         }
     }
 
