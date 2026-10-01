@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Tanglish Swap</string>
+    <string name="service_desc">Reads text in Instagram and shows Tamil/Telugu converted text on top of it.</string>
+</resources>
